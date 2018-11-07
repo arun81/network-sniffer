@@ -14,7 +14,7 @@
 # Usage
 - Run unit test cases for the alerting logic `python exercise_test.py`
 - Run the main program `python exercise.py`
-- Use browsers, curl, wget etc. to test out 
+- Use browsers, curl, wget etc. to test out HTTP sites E.g. http://www.bbc.com
 - Stops the main program `Ctrl+c`
 
 # Output Screenshot(Sample)

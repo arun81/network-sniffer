@@ -2,9 +2,10 @@
 1. Use tshark to sniff HTTP traffic on the host
 2. Adopt baseline learning at the beginning of the program to set average HTTP request rate
 3. Include various statistics : HTTP request rate, Top hits by Section, by Domain, by User-agent, by HTTP Method, by Status code, by Volume per Domain etc.
-4. Simple console-style outputs dashboard info
+4. Simple console-style outputs dashboard info with colored scheme
 5. Overflow protection: countermeasure of memory overrun by malformed payload
 6. By tagging each record with timestamp, enable to age out data that fall out a configurable retention window
+7. Highly configurable by static settings to change program behavior 
 
 # Prerequisites
 - Wireshark 2.2+
@@ -16,11 +17,27 @@
 - Run the main program `python exercise.py`
 - Use browsers, curl, wget etc. to test out HTTP sites E.g. http://www.bbc.com
 - Stops the main program `Ctrl+c`
+- Optional to edit `exercise_config.py` and customize program behavior 
+```python
+class Config:
+    '''
+    Configurations determine the behavior of the exercise program
+    '''
+    timeout = 2 #Frequency in sec to check for new HTTP transaction, default 2s
+    dashboard_bucket_size = 5 #Frequency in sec to refresh dashboard info, default 10s
+    average_bucket_size = 5#60*2 #Bucket size in sec for average HTTP request rate, default 2mins
+    average_threshold = 1 #Threshold in percentage to trigger alerts when exceeding <average_baseline>, default 10%
+    average_learning_duration = average_bucket_size #Duration of learning for average HTTP request rate, default 2mins
+    max_str_length = 1024 #Protection of overlong string, default set to 1kb
+    max_top_hits = 3 #Display top N hits on screen, hide the rest, default 10 hits
+    max_retention_length = 3600*24 #Retention length in sec, used to purge aging data, default 24hrs
+```
 
 # Output Screenshot(Sample)
 ## Learning mode
 
 <img src="screenshot_learning.png" width="200">
+
 ## Normal dashboard
 
 <img src="screenshot_normal.png" width="600">

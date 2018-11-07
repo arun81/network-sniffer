@@ -1,10 +1,10 @@
 # Key features
 1. Use tshark to sniff HTTP traffic on the host
-2. Adopt learning baseline at the beginning of the program to set average HTTP request rate
+2. Adopt baseline learning at the beginning of the program to set average HTTP request rate
 3. Include various statistics : HTTP request rate, Top hits by Section, by Domain, by User-agent, by HTTP Method, by Status code, by Volume per Domain etc.
 4. Simple console-style outputs dashboard info
 5. Overflow protection: countermeasure of memory overrun by malformed payload
-6. Purge aged data by tagging record with the most recent timestamp and configurable retention length as time sliding window
+6. By tagging each record with timestamp, enable to age out data that fall out a configurable retention window
 
 # Prerequisites
 - Wireshark 2.2+
@@ -15,9 +15,31 @@
 - Run unit test cases for the alerting logic `python exercise_test.py`
 - Run the main program `python exercise.py`
 - Stops the main program `Ctrl+c`
-    
+
+# Output Screenshot(Sample)
+## Learning mode
+
+<img src="screenshot_learning.png" width="200">
+## Normal dashboard
+
+<img src="screenshot_normal.png" width="600">
+
+## Alert message
+
+<img src="screenshot_alert.png" width="400">
+
+## Dismissal message
+
+<img src="screenshot_dismiss.png" width="400">
+
+# ToDo
+1. Support plug-in model to extend new statistics with minimal code changes
+2. Add other useful statistics such as:
+   1. Max alert duration
+   2. Average alert duration
+   
 # Design Document
-## Use case(Assumed)
+## Use Case(Assumed)
 DevOps need a dashboard to monitor general health of HTTP traffic, and alerting on unusual signs indicating issues in the infrastructure, either under attack or hit by performance.
 
 ## How Learning works

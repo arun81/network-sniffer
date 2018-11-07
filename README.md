@@ -14,6 +14,7 @@
 # Usage
 - Run unit test cases for the alerting logic `python exercise_test.py`
 - Run the main program `python exercise.py`
+- Use browsers, curl, wget etc. to test out 
 - Stops the main program `Ctrl+c`
 
 # Output Screenshot(Sample)
@@ -63,25 +64,27 @@ DevOps need a dashboard to monitor general health of HTTP traffic, and alerting 
 - Enforce mode transation(cycled): normal -> alert active -> alert dismiss
 
 ## Improvement and Considerations
-There are many things could be considered to better support the assumed use case in real-world production environment, break down to the list below:
+There are many things could be considered to better support the assumed use case in real-world production environment, they break down as followings:
 ### Statistics (examples)
 1. Top Hourly, Daily, Weekly, Monthly request rate
-2. Top Request rate and In|Outbound Data volume by source IP
-3. Top Data volume by Geo location of source IP
+2. Top In|Outbound Data volume by source IP
+3. Top Data volume by Geo location
 4. Top Protocol and Ports by source IP
 5. Top SaaS App action performed by source IP
+6. Top SaaS App users by request rate
 7. Average response time per server
+8. etc.
 ### Architecture and Extensibility
-1. SSL termination for backend servers
-2. Instead of passive sniffing, inline Reverse-proxy would not only inspect traffic also protect backend servers in real-time, which enables a long list of Proxy relevant security capabilities.
+1. SSL termination for backend servers to add visibility without security warnings in the browser 
+2. Inline Reverse-proxy not only inspects traffic also protect backend servers in real-time, which enables a long list of Proxy relevant security capabilities.
 3. Protocol Coverage
    1. More HTTP based protocol support: E.g. Websockets, SOAP, HTTP2 etc.
    2. More protocol support at layer 3-7: E.g. DNS, DNSSec, QUIC etc.
 4. Scale-ability
-   1. Use distributed Data store and application server to deploy the solution at scale
-   2. Use cluster to improve high availability
+   1. Use distributed Data store to store statistic information
+   2. Use Application server cluster to deploy the solution at scale
 ### Security features
-   1. WAF, CASB, DDoS, Anti-malware, ATP, DLP, SIEM integration, DNS-based security...
-   2. Threat intelligence based to build solution based on known good or bad
+   1. WAF, CASB, DDoS, Anti-malware, ATP, DLP, SIEM integration, DNS-based security, etc.
+   2. Threat intelligence based to build solution based on known good or bad.
    3. Combine supervised and unsupervised Machine learning based approach, to detect anomalies and uncover unseen attack patterns for security. 
-   4. Similarly Machine learning approach could also be applicable to detect anomalies in the server performance 
+   4. Similarly Machine learning approach could also help detect performance anomalies in the infrustructure.

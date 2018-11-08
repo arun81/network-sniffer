@@ -6,53 +6,60 @@
 5. Overflow protection: countermeasure of memory overrun by malformed payload
 6. By tagging each record with timestamp, enable to age out data that fall out a configurable retention window
 7. Highly configurable by static settings to change program behavior 
+8. Plug-in design to extend custom statistic modules (NEW)
 
 # Prerequisites
 - Wireshark 2.2+
 - Python 3.5+
-- Pyshark `pip install pyshark`
+- Pyshark
+- termcolor
+
+To automatically install all dependancieis, use: `pip install -r requirements.txt`
 
 # Usage
-- Run unit test cases for the alerting logic `python exercise_test.py`
-- Run the main program `python exercise.py`
+- Run unit test cases for the Alerting logic & State transition logic `python exercise_test.py`
+- Run the program `python exercise.py <eth0>`
+- Display help message `python exercise.py --help`
 - Use browsers, curl, wget etc. to test out HTTP sites E.g. http://www.bbc.com
-- Stops the main program `Ctrl+c`
-- Optional to edit `exercise_config.py` and customize program behavior 
+- Press `Ctrl+c` to stop the main program
+- Optional: edit `exercise_config.py` and customize program behavior 
 ```python
 class Config:
     '''
     Configurations determine the behavior of the exercise program
     '''
     timeout = 2 #Frequency in sec to check for new HTTP transaction, default 2s
-    dashboard_bucket_size = 5 #Frequency in sec to refresh dashboard info, default 10s
-    average_bucket_size = 5#60*2 #Bucket size in sec for average HTTP request rate, default 2mins
-    average_threshold = 1 #Threshold in percentage to trigger alerts when exceeding <average_baseline>, default 10%
-    average_learning_duration = average_bucket_size #Duration of learning for average HTTP request rate, default 2mins
+    dashboard_bucket_size = 10 #Frequency in sec to refresh dashboard info, default 10s
+    average_bucket_size = 60*2 #Bucket size in sec for average HTTP request rate, default 2mins
+    average_threshold = 10 #Threshold in percentage to trigger alerts when exceeding <average_baseline>, default 10%
+    average_learning_duration = average_bucket_size #Duration of learning for average HTTP request rate, default <average_bucket_size>
     max_str_length = 1024 #Protection of overlong string, default set to 1kb
-    max_top_hits = 3 #Display top N hits on screen, hide the rest, default 10 hits
+    max_top_hits = 10 #Display top <N> hits and hide the rest, default top 10 hits
     max_retention_length = 3600*24 #Retention length in sec, used to purge aging data, default 24hrs
 ```
 
 # Output Screenshot(Sample)
+## Help Message
+
+<img src="screenshot/screenshot_help.png" width="420">
 ## Learning mode
 
-<img src="screenshot_learning.png" width="200">
+<img src="screenshot/screenshot_learning.png" width="200">
 
 ## Normal dashboard
 
-<img src="screenshot_normal.png" width="600">
+<img src="screenshot/screenshot_normal.png" width="600">
 
 ## Alert message
 
-<img src="screenshot_alert.png" width="400">
+<img src="screenshot/screenshot_alert.png" width="400">
 
 ## Dismissal message
 
-<img src="screenshot_dismiss.png" width="400">
+<img src="screenshot/screenshot_dismiss.png" width="400">
 
 # ToDo
-1. Support plug-in model to extend new statistics with minimal code changes
-2. Add other useful statistics such as:
+1. Add other useful statistics such as:
    1. Max alert duration
    2. Average alert duration
    

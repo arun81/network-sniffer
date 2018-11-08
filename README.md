@@ -11,14 +11,13 @@
 # Prerequisites
 - Wireshark 2.2+
 - Python 3.5+
-- Pyshark
-- termcolor
-
-To automatically install all dependancieis, use: `pip install -r requirements.txt`
+- Use `pip install -r requirements.txt` to install external libraries of followings:
+  - Pyshark
+  - termcolor
 
 # Usage
 - Run unit test cases for the Alerting logic & State transition logic `python exercise_test.py`
-- Run the program `python exercise.py <eth0>`
+- Run the program `python exercise.py` to sniff on 'eth0' or `python exercise.py -i <interface_name>` to specify an interface
 - Display help message `python exercise.py --help`
 - Use browsers, curl, wget etc. to test out HTTP sites E.g. http://www.bbc.com
 - Press `Ctrl+c` to stop the main program

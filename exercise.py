@@ -1,49 +1,22 @@
-import pyshark
-import urllib
-import concurrent
-import datetime
-import os
-import platform
-import exercise_config #Store static settings
-import time
-from termcolor import colored, cprint
+try:
+    import pyshark
+    import os
+    import platform
+    import time
+    from termcolor import colored, cprint
+    import threading
+    import argparse
+    import sys
+    import exercise_config #Store static settings
+    from exercise_statistic import *
+    from exercise_state import *
+except ImportError:
+    sys.stderr.write("ERROR: found depedancies not yet installed, run 'pip install -r requirements.txt'\n")
+    exit(1)
 
-def sniff(capture):
-    """
-    Main program to process sniffed HTTP traffic and present info to the console.
-    
-    :param capture: tshark packet capture object for sniffing
+class HttpMonitor(object):
 
-    :raises All exceptions besides concurrent.futures.TimeoutError:
-
-    ##Todo: 
-    Add other useful statistics such as:
-        -max alert duration
-        -average alert duration
-    """
-    #Fetch static configurations
-    config = exercise_config.Config
-
-    #Run-time variables
-    average_baseline = 0 #average HTTP request rate baseline per <average_bucket_size>
-    average_bucket_countdown = config.average_bucket_size #countdown in sec when to refresh average request per <average_bucket_size>
-    dashboard_bucket_countdown = config.dashboard_bucket_size #countdown in sec when to refresh top-hits list
-    average_learning_countdown = config.average_learning_duration #countdown in sec when to stop learning average request baseline
-
-    #Run-time data structures
-    top_hits_by_section = {} #Map trakcing unique Section & count
-    top_hits_by_domain = {} #Map tracking unique Host & count
-    top_hits_by_useragent = {} #Map tracking unique User-Agent & count
-    top_hits_by_method = {} #Map tracking unique HTTP Method & count
-    top_hits_by_statuscode = {} #Map tracking unique HTTP Status code & count
-    top_hits_by_req_vol_by_domain = {} #Map tracking unique Host & request volume
-    status_map = {
-        'http_request_count':0,
-        'running_mode':'learn_baseline' #Other possible values: enforce_alert, enforce_dismiss, learn_baseline
-    } #Map tracking current status
-    alert_history = [] #Store all history alerts, store up to max_alert_entry
-
-    def tshark_callback(packet):
+    def tshark_callback(self,packet):
         """
         Callback function invoked by tshark to notify upon new HTTP transaction arrival.
 
@@ -51,210 +24,184 @@ def sniff(capture):
         """
         #Count HTTP request
         if hasattr(packet.http, 'request'):
-            status_map['http_request_count']+=1
+            self.request_count += 1
 
-        #Skip during learning mode    
-        if status_map['running_mode'] == 'learn_baseline':
+        #Skip running Plug-ins during learning mode    
+        if self.state.check_state(LearnState):
             return 
 
-        if hasattr(packet.http, 'response'):
-            #Collect Top hits response volume by Status code
-            if hasattr(packet.http, 'response_code') and len(packet.http.response_code)>0:
-                response_code = packet.http.response_code[:config.max_str_length] #Trucate overlong string
-                if response_code in top_hits_by_statuscode:
-                    top_hits_by_statuscode[response_code][0] += 1
-                else:
-                    top_hits_by_statuscode[response_code] = [1,0]
-                top_hits_by_statuscode[response_code][1] = time.time()
+        #Calling all StatisticVisitors Plug-ins
+        for plugin in self.statistic_plugins:
+            plugin.accept_packet(packet)
 
-        elif hasattr(packet.http, 'request'):
-            #Collect Top hits by Host
-            if hasattr(packet.http, 'host') and len(packet.http.host)>0:
-                host = packet.http.host[:config.max_str_length] #Trucate overlong string
-                #Collect Top hits request count by Host
-                if host in top_hits_by_domain:
-                    top_hits_by_domain[host][0] += 1
-                else:
-                    top_hits_by_domain[host] = [1,0]
-                top_hits_by_domain[host][1] = time.time()
-
-                #Collect Top hits request volume by Host
-                if host in top_hits_by_req_vol_by_domain:
-                    top_hits_by_req_vol_by_domain[host][0] += int(packet.length)
-                else:
-                    top_hits_by_req_vol_by_domain[host] = [int(packet.length),0]
-                top_hits_by_req_vol_by_domain[host][1] = time.time()
-
-            #Collect Top hits by User-Agent
-            if hasattr(packet.http, 'user_agent') and len(packet.http.user_agent)>0:
-                user_agent = packet.http.user_agent[:config.max_str_length] #Trucate overlong string
-                if user_agent in top_hits_by_useragent:
-                    top_hits_by_useragent[user_agent][0] += 1
-                else:
-                    top_hits_by_useragent[user_agent] = [1,0]
-                top_hits_by_useragent[user_agent][1] = time.time()
-
-            #Collect Top hits by HTTP Method
-            if hasattr(packet.http, 'request_method') and len(packet.http.request_method)>0:
-                request_method = packet.http.request_method[:config.max_str_length] #Trucate overlong string
-                if request_method in top_hits_by_method:
-                    top_hits_by_method[request_method][0] += 1
-                else:
-                    top_hits_by_method[request_method] = [1,0]
-                top_hits_by_method[request_method][1] = time.time()
-
-            #Collect Top hits by Section
-            section_str = 'http://'+packet.http.host
-            if hasattr(packet.http, 'request_uri') and len(packet.http.request_uri)>0:
-                str_arr = urllib.parse.unquote(packet.http.request_uri).split('/') #Normalize URL decode path
-                for string in str_arr: #Normalize multiple slash '/'
-                    if len(string) > 0:
-                        str_arr2 = string.split('?') #Remove request parameters
-                        if len(str_arr2[0]) > 0:
-                            section_str += '/'+str_arr2[0][:config.max_str_length] #Trim section to max length
-                        break
-            if section_str in top_hits_by_section:
-                top_hits_by_section[section_str][0] += 1
-            else:
-                top_hits_by_section[section_str] = [1,0]
-            top_hits_by_section[section_str][1] = time.time()
-
-    def print_top_hits(title, hits):
+    def run(self):
         """
-        Sort, print & trim Top N hits
+        Main program to process sniffed HTTP traffic and present info to the console.
+        
+        :param capture: tshark packet capture object for sniffing
 
-        :param title: A short text description to be printed at top of the section
-        :param hits: Dictionary object stores hits info in key, value pair
+        :raises All exceptions besides concurrent.futures.TimeoutError:
+
+        ##Todo: 
+        -Support plug-in model to extend new statistics with minimal code changes
+        -Add other useful statistics such as:
+            -max alert duration
+            -average alert duration
         """
-        cprint('\n\r<<<Top Hits '+title+'>>>','white', 'on_grey')
-        if len(hits) == 0: 
-            return hits
-        count = 0
-        for key,value in sorted(hits.items(), key=lambda kv: (kv[1][0],kv[1][1]), reverse=True): #Sort by value and last timestamp
-            print(key+': '+colored(str(value[0]),'blue')+' last seen: '+time.strftime('%H:%M:%S %Y/%m/%d', time.localtime(value[1])))   
-            count+=1
-            if count >= config.max_top_hits: #Limit top N hits to screen
-                break
-        #Trim hits and return
-        trim_hits = sorted(hits.items(), key=lambda kv: (kv[1][1])) #Sort by last seen in asecdent
-        while len(trim_hits) > 0:
-            if time.time()-trim_hits[0][1][1] > config.max_retention_length:
-                hits.pop(trim_hits[0][0]) #Remove aging item by key
-                trim_hits.pop(0) #Sync sorted list
-            else:
-                break
 
-    while True:
-        try:
-            capture.apply_on_packets(tshark_callback, timeout=config.timeout)
-        except concurrent.futures.TimeoutError:
-            pass
+        #Launch new thread for tshark sniffing
+        sniff_thread = threading.Thread(target=self.capture.apply_on_packets, args=(self.tshark_callback,))
+        sniff_thread.start()
 
-        #Learning mode...
-        if status_map['running_mode'] == 'learn_baseline':
-            average_learning_countdown-=config.timeout
-            if average_learning_countdown < 0:
-                average_learning_countdown = 0 #Int underflow protection
-            #Calculate average baseline per <average_bucket_size>
-            average_baseline = round(status_map['http_request_count']*config.average_bucket_size/(config.average_learning_duration-average_learning_countdown))
+        while True:
+          try:
+            time.sleep(self.config.timeout)
 
-            #Print learning status
-            os.system('cls' if platform=='Windows' else 'clear')
-            cprint ('<<<Learning mode>>>', 'white', 'on_grey')
-            print ("Collected "+colored(str(status_map['http_request_count']),'blue')+' HTTP request in '+str(config.average_learning_duration-average_learning_countdown)+'s')
-            print ("Est. average rate: " + colored(str(average_baseline)+'/'+str(config.average_bucket_size)+'s', 'blue'))
-            print (str(average_learning_countdown) + 's counting down...')
-            #Prepare exiting learning
-            if average_learning_countdown <= 0:
-                status_map['http_request_count'] = 0 #Reset HTTP request count
-                average_learning_countdown = config.average_learning_duration #Reset learning countdown for next learning
-                if average_baseline > 0: #Restart learning when baseline==0
-                    status_map['running_mode'] = 'enforce_normal' #Set to run enforcing mode
+            #Learning mode...
+            if self.state.check_state(LearnState):
+                self.average_learning_countdown-=self.config.timeout
+                if self.average_learning_countdown < 0:
+                    self.average_learning_countdown = 0 #Int underflow protection
+                #Calculate average baseline per <average_bucket_size>
+                self.average_baseline = round(self.request_count*self.config.average_bucket_size/(self.config.average_learning_duration-self.average_learning_countdown))
+
+                #Print learning status
+                os.system('cls' if platform=='Windows' else 'clear')
+                cprint ('<<<Learning mode>>>', 'white', 'on_grey')
+                print ("Collected "+colored(str(self.request_count),'blue')+' HTTP request in '+str(self.config.average_learning_duration-self.average_learning_countdown)+'s')
+                print ("Est. average rate: " + colored(str(self.average_baseline)+'/'+str(self.config.average_bucket_size)+'s', 'blue'))
+                print (str(self.average_learning_countdown) + 's counting down...')
+                #Prepare exiting learning
+                if self.average_learning_countdown <= 0:
+                    self.request_count = 0 #Reset HTTP request count
+                    self.average_learning_countdown = self.config.average_learning_duration #Reset learning countdown for next learning
+                    if self.average_baseline > 0: #Restart learning when baseline==0
+                        self.state.switch(NormalState) #Set to enforcing mode after finishing learning
+                    else:
+                        continue #Skip during learning mode
                 else:
                     continue #Skip during learning mode
-            else:
-                continue #Skip during learning mode
 
-        #Enforce mode...
-        dashboard_bucket_countdown-=config.timeout
-        average_bucket_countdown-=config.timeout
+            #Enforce mode...
+            self.dashboard_bucket_countdown-=self.config.timeout
+            self.average_bucket_countdown-=self.config.timeout
 
-        #Update Alert status based on current request count
-        if average_bucket_countdown <= 0:
-            average_bucket_countdown = config.average_bucket_size #Reset average request countdown 
-            process_alert(status_map, config.average_threshold, average_baseline, alert_history)
+            #Update Alert status based on current request count
+            if self.average_bucket_countdown <= 0:
+                self.average_bucket_countdown = self.config.average_bucket_size #Reset average request countdown 
+                self.process_alert(self.state, self.request_count, self.config.average_threshold, self.average_baseline, self.alert_history)
+                self.request_count = 0 #Reset HTTP request count
 
-        #Update dashboard info on screen
-        if dashboard_bucket_countdown <= 0:
-            dashboard_bucket_countdown = config.dashboard_bucket_size #Reset top-hits countdown
-            #Clean up screen
-            os.system('cls' if platform=='Windows' else 'clear')
+            #Update dashboard info on screen
+            if self.dashboard_bucket_countdown <= 0:
+                self.dashboard_bucket_countdown = self.config.dashboard_bucket_size #Reset top-hits countdown
+                #Clean up screen
+                os.system('cls' if platform=='Windows' else 'clear')
 
-            #Print baseline info
-            print ('\n\r[INFO] Average baseline: '+colored(str(average_baseline)+'/'+str(config.average_bucket_size)+'s','blue')+', Alert threshold: '+colored(str(config.average_threshold)+'%','yellow'))
+                #Print baseline info
+                print ('\n\r[INFO] Average baseline: '+colored(str(self.average_baseline)+'/'+str(self.config.average_bucket_size)+'s','blue')+', '+
+                    'Alert threshold: '+colored(str(self.config.average_threshold)+'%','yellow')+', '+
+                    'Current average: '+colored(str(self.request_count)+'/'+str(self.config.average_bucket_size)+'s','blue')+', '+
+                    'Next Alert check in '+colored(str(self.average_bucket_countdown)+'s...','blue'))
 
-            #Print Alert status
-            if status_map['running_mode'] == 'enforce_alert':
-                cprint ('\n\r<<<Alert Active>>>','red')
-            elif status_map['running_mode'] == 'enforce_dismiss':
-                cprint ('\n\r<<<Alert Dismissal>>>','green')
+                #Print Alert status
+                if len(self.alert_history) > 0 and self.state.check_state(NormalState)==False:
+                    if self.state.check_state(AlertState):
+                        cprint ('\n\r<<<Active Alert>>>','red')
+                    elif self.state.check_state(DismissState):
+                        cprint ('\n\r<<<Alert Dismissed>>>','green')
+                    print("High traffic generated an alert - hits="+colored(str(self.alert_history[0][0]),'yellow')+", triggered at "+time.strftime('%H:%M:%S %Y/%m/%d', time.localtime(self.alert_history[0][1])))
+                    
+                #Trim Alert history
+                while len(self.alert_history) > 0:
+                    if time.time()-self.alert_history[len(self.alert_history)-1][1] > self.config.max_retention_length:
+                        self.alert_history.pop()
+                    else:
+                        break
+                #Print Alert history
+                cprint ('\n\r<<<Alert History>>>', 'yellow', 'on_grey')
+                for alert in self.alert_history:
+                    print("hits "+colored(str(alert[0]),'yellow')+" at "+time.strftime('%H:%M:%S %Y/%m/%d', time.localtime(alert[1])))
+                    
+                #Print All StatisticVisitor Plug-ins
+                for plugin in self.statistic_plugins:
+                    plugin.print()
 
-            #Trim Alert history
-            while len(alert_history) > 0:
-                if time.time()-alert_history[len(alert_history)-1][1] > config.max_retention_length:
-                    alert_history.pop()
-                else:
-                    break
-            #Print Alert history
-            cprint ('\n\r<<<Alert History>>>', 'yellow', 'on_grey')
-            for alert in alert_history:
-                print("hits="+colored(str(alert[0]),'yellow')+", triggered at "+time.strftime('%H:%M:%S %Y/%m/%d', time.localtime(alert[1])))
-                
-            #Print Top hits
-            print_top_hits('by Section', top_hits_by_section)
-            print_top_hits('by Domain', top_hits_by_domain)
-            print_top_hits('by User-Agent', top_hits_by_useragent)
-            print_top_hits('by HTTP Method', top_hits_by_method)
-            print_top_hits('by Status code', top_hits_by_statuscode)
-            print_top_hits('Upload Volume by Domain', top_hits_by_req_vol_by_domain)
+          except KeyboardInterrupt:
+            sniff_thread.join()
+            break
 
-def process_alert(_status_map, _average_threshold, _average_baseline, _alert_history):
-    """
-    Calculate current rate against threshold, manage alert state transitioning when needed.
+    @staticmethod
+    def process_alert(_state, _request_count, _average_threshold, _average_baseline, _alert_history):
+        """
+        Calculate current rate against threshold, manage alert state transitioning when needed.
 
-    :param _status_map: 
-    :param _average_threshold:
-    :param _average_baseline:
-    :param _alert_history:
+        :param _state: AbstractState object indicates the current running state
+        :param _request_count: current request count
+        :param _average_threshold: alerting threshold from configuration
+        :param _average_baseline: baseline learned
+        :param _alert_history: array holding the history of alerts in reverse order
 
-    :return Delta in percentage between baseline rate and the current rate
-    """
-    average_delta = (_status_map['http_request_count']-_average_baseline)*100/_average_baseline #Percentage of baseline delta
-    if average_delta > _average_threshold: 
-        _status_map['running_mode'] = 'enforce_alert' #Set alert to active
-        _alert_history.insert(0, [_status_map['http_request_count'], time.time()])
-    else:
-        if _status_map['running_mode'] == 'enforce_alert': 
-            _status_map['running_mode'] = 'enforce_dismiss' #Set enforce_alert -> enforce_dismiss
+        :return Delta in percentage between baseline rate and the current rate
+        """
+        average_delta = (_request_count-_average_baseline)*100/_average_baseline #Percentage of baseline delta
+        if average_delta > _average_threshold: 
+            _state.switch(AlertState) #Set alert to active
+            _alert_history.insert(0, [_request_count, time.time()])
         else:
-            _status_map['running_mode'] = 'enforce_normal'
-    _status_map['http_request_count'] = 0 #Reset request count
-    return average_delta
+            if _state.check_state(AlertState): 
+                _state.switch(DismissState) #Set enforce_alert -> enforce_dismiss
+            else:
+                _state.switch(NormalState)
+        return average_delta
 
-def main():
-    """
-    Initialize tshark stack before launching the sniffing program
+    def __init__(self, interface, filter):
+        """
+        Intialize member variables
+        """
+        #Initialize tshark stack
+        self.capture = pyshark.LiveCapture(interface=interface, display_filter=filter) #bpf_filter='tcp port 80')
+        
+        #Fetch static configurations
+        self.config = exercise_config.Config
 
-    :raises All the exceptions
-    """
-    capture = pyshark.LiveCapture(interface='eth0', display_filter='http') #bpf_filter='tcp port 80')
-    try:
-        sniff(capture)
-    except:
+        #Run-time variables
+        self.average_baseline = 0 #average HTTP request rate baseline per <average_bucket_size>
+        self.average_bucket_countdown = self.config.average_bucket_size #countdown in sec when to refresh average request per <average_bucket_size>
+        self.dashboard_bucket_countdown = self.config.dashboard_bucket_size #countdown in sec when to refresh top-hits list
+        self.average_learning_countdown = self.config.average_learning_duration #countdown in sec when to stop learning average request baseline
+        self.request_count = 0 #Tracking Http Request count
+        self.state = LearnState() #Starts with learning states
+        self.alert_history = [] #Stores all history alerts, aged data greater than <Config.max_retention_length> are periodically removed
+
+        #Include Plug-in classes to use
+        self.statistic_plugins = [ #A list of statistic plug-ins currently available, aged data greater than <Config.max_retention_length> are periodically removed
+            TopHitsBySection(self.config),           #Count by uniuqe Section
+            TopHitsByHost(self.config),              #Count by unique Domain
+            TopHitsUploadByHost(self.config),        #Request data volume by unique Domain
+            TopHitsByUserAgent(self.config),         #Count by uniuqe User-Agent
+            TopHitsByHttpMethod(self.config),        #Count by uniuqe Http Method
+            TopHitsByStatusCode(self.config)         #Count by unique Status code
+        ] 
+
+    def __del__(self):
+        """
+        Release tshark resources
+        """
         print("Closing...")
-        capture.close() #Release tshark resources
-        del capture
-        raise
+        self.capture.close()
+        del self.capture
 
 if __name__ == '__main__':
-    main()
+    #Parse out commandline arguments
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="This program monitors HTTP traffic, print information and reports alert.",
+    )
+    parser.add_argument("--interface", "-i", help="Which interface to sniff on.", default="eth0")
+    args = parser.parse_args()
+    
+    #Create HttpMonitor with sniffing parameters
+    monitor = HttpMonitor(args.interface, 'http')
+    #start sniffing now...
+    monitor.run()

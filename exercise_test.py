@@ -1,5 +1,6 @@
-import exercise
+from exercise import HttpMonitor
 import unittest
+from exercise_state import *
 
 class TestAlertLogic(unittest.TestCase):
 
@@ -7,64 +8,83 @@ class TestAlertLogic(unittest.TestCase):
         """
         Test HTTP request rate equals to the threshold
         """
-        _status_map = {
-            'http_request_count':101, #mock request count excceding by 1%
-            'running_mode':'enforce_normal' #Normal state
-        } #Map tracking current status
+        state = NormalState() #Normal state
+        request_count = 101 #mock request count excceding by 1%
+    
         _alert_history = [] #Store all history alerts, store up to max_alert_entry
         _average_baseline = 100 #baseline
         _average_threshold = 1 #exceeding 1%
-        exceed = exercise.process_alert(_status_map, _average_threshold, _average_baseline, _alert_history)
+        exceed = HttpMonitor.process_alert(state, request_count, _average_threshold, _average_baseline, _alert_history)
 
+        #Assert expected values
         self.assertEqual(exceed, 1)
         self.assertEqual(len(_alert_history), 0)
-        self.assertEqual(_status_map['running_mode'], 'enforce_normal')
+        self.assertTrue(state.check_state(NormalState))
 
     def test_over_threshold(self):
         '''
         Test HTTP request rate exceeds threshold by 2%
         '''
-        _status_map = {
-            'http_request_count':102, #mock request count excceding by 2%
-            'running_mode':'enforce_normal' #Normal state
-        } #Map tracking current status
+        state = NormalState() #Normal state
+        request_count = 102 #mock request count excceding by 2%
         _alert_history = [] #Store all history alerts, store up to max_alert_entry
         _average_baseline = 100 #baseline
         _average_threshold = 1 #exceeding 1%
-        exceed = exercise.process_alert(_status_map, _average_threshold, _average_baseline, _alert_history)
+        exceed = HttpMonitor.process_alert(state, request_count, _average_threshold, _average_baseline, _alert_history)
 
+        #Assert expected values
         self.assertEqual(exceed, 2)
         self.assertEqual(len(_alert_history), 1)
-        self.assertEqual(_status_map['running_mode'], 'enforce_alert')       
+        self.assertTrue(state.check_state(AlertState))       
 
     def test_alert_transaction(self):
         '''
         Test alert state transition: enforce_alert->enforce_alert->enforce_dismiss->enforce_normal
         '''
-        _status_map = {
-            'http_request_count':103, #mock request count by 3%
-            'running_mode':'enforce_alert' #Alert state
-        } #Map tracking current status
+        state = AlertState() #Set Alert state
+        request_count = 103 #mock request count excceding by 3%
         _alert_history = [] #Store all history alerts, store up to max_alert_entry
         _average_baseline = 100 #baseline
         _average_threshold = 1 #exceeding 1%
-        exceed = exercise.process_alert(_status_map, _average_threshold, _average_baseline, _alert_history)
+        exceed = HttpMonitor.process_alert(state, request_count, _average_threshold, _average_baseline, _alert_history)
 
+        #Assert expected values
         self.assertEqual(exceed, 3)
         self.assertEqual(len(_alert_history), 1)
-        self.assertEqual(_status_map['running_mode'], 'enforce_alert') 
+        self.assertTrue(state.check_state(AlertState)) 
 
-        _status_map['http_request_count'] = 99 #mock request count below threshold
-        exceed = exercise.process_alert(_status_map, _average_threshold, _average_baseline, _alert_history)
+        request_count = 99 #mock request count below threshold, 1st time
+        exceed = HttpMonitor.process_alert(state, request_count, _average_threshold, _average_baseline, _alert_history)
+
+        #Assert expected values
         self.assertLess(exceed, 0)
         self.assertEqual(len(_alert_history), 1)
-        self.assertEqual(_status_map['running_mode'], 'enforce_dismiss') 
+        self.assertTrue(state.check_state(DismissState)) #Check Dismissal state
 
-        _status_map['http_request_count'] = 99 #mock request count below threshold
-        exceed = exercise.process_alert(_status_map, _average_threshold, _average_baseline, _alert_history)
+        request_count = 99 #mock request count below threshold, 2nd time
+        exceed = HttpMonitor.process_alert(state, request_count, _average_threshold, _average_baseline, _alert_history)
+
+        #Assert expected values
         self.assertLess(exceed, 0)
         self.assertEqual(len(_alert_history), 1)
-        self.assertEqual(_status_map['running_mode'], 'enforce_normal') 
-  
+        self.assertTrue(state.check_state(NormalState)) 
+
+    def test_state_transition(self):
+        '''
+        Test a state transition flow
+        '''
+        state = LearnState() #Start with learn_baseline
+        self.assertEqual(state.name, 'learn_baseline')
+        state.switch(NormalState)
+        self.assertEqual(state.name, 'enforce_normal')
+        self.assertTrue(isinstance(state,NormalState))
+        with self.assertRaises(Exception): state.switch(DismissState) #FAILED: enforce_normal -> enforce_dismiss
+        self.assertTrue(isinstance(state,NormalState)) #Verify state stay normal
+        state.switch(AlertState) #OK: enforce_normal -> enforce_alert
+        self.assertTrue(isinstance(state,AlertState)) #Verify state set to enforce_alert
+        state.switch(AlertState) #OK: stay enforce_alert
+        with self.assertRaises(Exception): state.switch(NormalState) #FAILED: enforce_alert -> enforce_normal
+        state.switch(DismissState) #OK: enforce_alert -> enforce_dismiss
+
 if __name__ == '__main__':
     unittest.main()

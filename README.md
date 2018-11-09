@@ -1,5 +1,5 @@
 # Key features
-1. Use tshark to sniff HTTP traffic on the host
+1. Use Scapy to sniff HTTP traffic on the host
 2. Adopt baseline learning at the beginning of the program to set average HTTP request rate
 3. Include various statistics : HTTP request rate, Top hits by Section, by Domain, by User-agent, by HTTP Method, by Status code, by Volume per Domain etc.
 4. Simple console-style outputs dashboard info with colored scheme
@@ -7,17 +7,19 @@
 6. By tagging each record with timestamp, enable to age out data that fall out a configurable retention window
 7. Highly configurable by static settings to change program behavior 
 8. Plug-in design to extend custom statistic modules (NEW)
+9. Implemented using OOA/OOD design patterns (NEW)
 
 # Prerequisites
-- Wireshark 2.2+
 - Python 3.5+
 - Use `pip install -r requirements.txt` to install external libraries of followings:
-  - Pyshark
+  - scapy
+  - scapy-http
   - termcolor
 
 # Usage
 - Run unit test cases for the Alerting logic & State transition logic `python exercise_test.py`
-- Run the program `python exercise.py` to sniff on 'eth0' or `python exercise.py -i <interface_name>` to specify an interface
+- Run the program `python exercise.py` to sniff on 'eth0'
+  -Or `python exercise.py -i <interface_name> -p <port#>` to specify an interface and/or port number
 - Display help message `python exercise.py --help`
 - Use browsers, curl, wget etc. to test out HTTP sites E.g. http://www.bbc.com
 - Press `Ctrl+c` to stop the main program

@@ -3,7 +3,7 @@ class Config:
     Configurations determine the behavior of the exercise program
     '''
     timeout = 1 #Frequency in sec to check for new HTTP transaction, default 2s
-    dashboard_bucket_size = 10 #Frequency in sec to refresh dashboard info, default 10s
+    dashboard_bucket_size = 1 #Frequency in sec to refresh dashboard info, default 10s
     average_bucket_size = 60*2 #Bucket size in sec for average HTTP request rate, default 2mins
     average_threshold = 10 #Threshold in percentage to trigger alerts when exceeding <average_baseline>, default 10%
     average_learning_duration = average_bucket_size #Duration of learning for average HTTP request rate, default 2mins

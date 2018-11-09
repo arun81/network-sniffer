@@ -1,5 +1,8 @@
 try:
-    import pyshark
+    from scapy.all import sniff
+    from scapy import error
+    import scapy_http.http
+    import requests
     import os
     import platform
     import time
@@ -10,20 +13,23 @@ try:
     import exercise_config #Store static settings
     from exercise_statistic import *
     from exercise_state import *
-except ImportError:
-    sys.stderr.write("ERROR: found depedancies not yet installed, run 'pip install -r requirements.txt'\n")
+except ImportError as err:
+    sys.stderr.write("ERROR: found depedancies not yet installed, run 'pip install -r requirements.txt'\n\r"+str(err)+'\n\r')
     exit(1)
 
 class HttpMonitor(object):
 
-    def tshark_callback(self,packet):
+    def _callback(self,packet):
         """
         Callback function invoked by tshark to notify upon new HTTP transaction arrival.
 
         :param packet: packet object received from tshark
         """
+        response = packet.getlayer(scapy_http.http.HTTPResponse)
+        request = packet.getlayer(scapy_http.http.HTTPRequest)
+
         #Count HTTP request
-        if hasattr(packet.http, 'request'):
+        if request:
             self.request_count += 1
 
         #Skip running Plug-ins during learning mode    
@@ -32,28 +38,43 @@ class HttpMonitor(object):
 
         #Calling all StatisticVisitors Plug-ins
         for plugin in self.statistic_plugins:
-            plugin.accept_packet(packet)
+            plugin.accept_packet(packet, request, response)
+
+    def _sniff(self):
+        """
+        Start calling sniff block mode in a thread, wait until exit_event set to exit 
+        """
+        try:
+            sniff(iface=self.interface,
+                promisc=False,
+                filter='tcp and port '+self.filter,
+                lfilter=lambda x: x.haslayer(scapy_http.http.HTTPRequest) or x.haslayer(scapy_http.http.HTTPResponse),
+                prn=self._callback,
+                count=0,
+                stop_filter=lambda p: self.exit_event.is_set()
+            )
+        except OSError as err:
+            sys.stderr.write ('Sniffer error: '+str(err)+'\n\r') #Likely triggered by "No such device"
+        except:
+            sys.stderr.write ('Unexpected Sniffer error: '+ sys.exc_info()[0]+'\n\r')
 
     def run(self):
         """
         Main program to process sniffed HTTP traffic and present info to the console.
-        
-        :param capture: tshark packet capture object for sniffing
 
-        :raises All exceptions besides concurrent.futures.TimeoutError:
-
-        ##Todo: 
-        -Support plug-in model to extend new statistics with minimal code changes
+        ##Todo:
         -Add other useful statistics such as:
             -max alert duration
             -average alert duration
         """
 
-        #Launch new thread for tshark sniffing
-        sniff_thread = threading.Thread(target=self.capture.apply_on_packets, args=(self.tshark_callback,))
+        #Launch new thread for sniffing
+        sniff_thread = threading.Thread(target=self._sniff)
         sniff_thread.start()
+        time.sleep(1)
 
-        while True:
+        #Update dashboard as long as sniffing up working
+        while sniff_thread.is_alive():
           try:
             time.sleep(self.config.timeout)
 
@@ -128,6 +149,8 @@ class HttpMonitor(object):
                     plugin.print()
 
           except KeyboardInterrupt:
+            self.exit_event.set()
+            requests.get('http://www.bbc.com')
             sniff_thread.join()
             break
 
@@ -159,11 +182,10 @@ class HttpMonitor(object):
         """
         Intialize member variables
         """
-        #Initialize tshark stack
-        self.capture = pyshark.LiveCapture(interface=interface, display_filter=filter) #bpf_filter='tcp port 80')
-        
-        #Fetch static configurations
+        #Fetch configurations
         self.config = exercise_config.Config
+        self.interface = interface
+        self.filter = filter
 
         #Run-time variables
         self.average_baseline = 0 #average HTTP request rate baseline per <average_bucket_size>
@@ -173,6 +195,7 @@ class HttpMonitor(object):
         self.request_count = 0 #Tracking Http Request count
         self.state = LearnState() #Starts with learning states
         self.alert_history = [] #Stores all history alerts, aged data greater than <Config.max_retention_length> are periodically removed
+        self.exit_event = threading.Event()
 
         #Include Plug-in classes to use
         self.statistic_plugins = [ #A list of statistic plug-ins currently available, aged data greater than <Config.max_retention_length> are periodically removed
@@ -181,16 +204,8 @@ class HttpMonitor(object):
             TopHitsUploadByHost(self.config),        #Request data volume by unique Domain
             TopHitsByUserAgent(self.config),         #Count by uniuqe User-Agent
             TopHitsByHttpMethod(self.config),        #Count by uniuqe Http Method
-            TopHitsByStatusCode(self.config)         #Count by unique Status code
-        ] 
-
-    def __del__(self):
-        """
-        Release tshark resources
-        """
-        print("Closing...")
-        self.capture.close()
-        del self.capture
+            TopHitsByStatusCode(self.config)         #Count by unique Status line
+        ]
 
 if __name__ == '__main__':
     #Parse out commandline arguments
@@ -199,9 +214,10 @@ if __name__ == '__main__':
         description="This program monitors HTTP traffic, print information and reports alert.",
     )
     parser.add_argument("--interface", "-i", help="Which interface to sniff on.", default="eth0")
+    parser.add_argument("--port", "-p", help="Which port to sniff on HTTP traffic.", default="80")
     args = parser.parse_args()
     
     #Create HttpMonitor with sniffing parameters
-    monitor = HttpMonitor(args.interface, 'http')
+    monitor = HttpMonitor(args.interface, args.port)
     #start sniffing now...
     monitor.run()

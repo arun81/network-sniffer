@@ -1,2 +1,4 @@
 termcolor>=1.1.0
 pyshark>=0.4.1
+scapy>=2.4.0
+scapy-http>=1.8.2

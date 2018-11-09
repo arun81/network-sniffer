@@ -18,8 +18,7 @@
 
 # Usage
 - Run unit test cases for the Alerting logic & State transition logic `python exercise_test.py`
-- Run the program `python exercise.py` to sniff on 'eth0'
-  -Or `python exercise.py -i <interface_name> -p <port#>` to specify an interface and/or port number
+- Run the program `python exercise.py` to sniff on 'eth0', or `python exercise.py -i <interface_name> -p <port#>` to specify interface and/or port number
 - Display help message `python exercise.py --help`
 - Use browsers, curl, wget etc. to test out HTTP sites E.g. http://www.bbc.com
 - Press `Ctrl+c` to stop the main program

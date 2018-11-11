@@ -20,7 +20,7 @@
 - Run unit test cases for the Alerting logic & State transition logic `python exercise_test.py`
 - Run the program `python exercise.py` to sniff on 'eth0', or `python exercise.py -i <interface_name> -p <port#>` to specify interface and/or port number
 - Display help message `python exercise.py --help`
-- Use browsers, curl, wget etc. to test out HTTP sites E.g. http://www.bbc.com
+- Manually use browsers, curl, wget etc., or, `python gen_traffic.py -i <host_name> -f <seconds>` to automatically hit HTTP website(www.google.com by default) at the interval specified(5s by default) to test out the program
 - Press `Ctrl+c` to stop the main program
 - Optional: edit `exercise_config.py` and customize program behavior 
 ```python

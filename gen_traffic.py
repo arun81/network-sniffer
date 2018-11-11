@@ -15,6 +15,10 @@ parser.add_argument("--frequency", "-f", type=int, help="How frequent to visit H
 args = parser.parse_args()
 
 while True:
-    requests.get('http://'+args.host)
+    try: 
+        requests.get('http://'+args.host)
+    except requests.exceptions.ConnectionError:
+        print ("network error, retry...")
+        continue
     print ('http://'+args.host+'... at '+time.strftime('%H:%M:%S %Y/%m/%d', time.localtime(time.time())))
     time.sleep(args.frequency)

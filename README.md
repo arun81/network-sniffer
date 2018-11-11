@@ -15,6 +15,7 @@
   - scapy
   - scapy-http
   - termcolor
+  - requests
 
 # Usage
 - Run unit test cases for the Alerting logic & State transition logic `python exercise_test.py`

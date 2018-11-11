@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser(
     description="This program Generate HTTP traffic every interval.",
 )
 parser.add_argument("--host", "-i", help="Which host to visit.", default="www.google.com")
-parser.add_argument("--frequency", "-f", help="How frequent to visit Host.", default=5)
+parser.add_argument("--frequency", "-f", type=int, help="How frequent to visit Host.", default=5)
 args = parser.parse_args()
 
 while True:

@@ -1,13 +1,13 @@
-# Key features
-1. Use Scapy to sniff HTTP traffic on the host
-2. Adopt baseline learning at the beginning of the program to set average HTTP request rate
+# Highlight
+1. Based on Scapy, sniffing HTTP traffic on the host, can be changed to sniff any network packets.
+2. Learn simple baseline at the beginning of the program to set average HTTP request rate
 3. Include various statistics : HTTP request rate, Top hits by Section, by Domain, by User-agent, by HTTP Method, by Status code, by Volume per Domain etc.
 4. Simple console-style outputs dashboard info with colored scheme
 5. Overflow protection: countermeasure of memory overrun by malformed payload
 6. By tagging each record with timestamp, enable to age out data that fall out a configurable retention window
 7. Highly configurable by static settings to change program behavior 
-8. Plug-in design to extend custom statistic modules (NEW)
-9. Implemented using OOA/OOD design patterns (NEW)
+8. Plug-in design to extend custom statistic modules
+9. Implemented using OOA/OOD design patterns
 
 # Prerequisites
 - Python 3.5+
@@ -47,15 +47,15 @@ class Config:
 
 <img src="screenshot/screenshot_learning.png" width="200">
 
-## Normal dashboard
+## Dashboard in normal state
 
 <img src="screenshot/screenshot_normal.png" width="600">
 
-## Alert message
+## Dashboard in alerting state
 
 <img src="screenshot/screenshot_alert.png" width="400">
 
-## Dismissal message
+## Dashboard in alerting dismissal state
 
 <img src="screenshot/screenshot_dismiss.png" width="400">
 
